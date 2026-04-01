@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우리 반 타이머 & 스톱워치</title>
+    <!-- 귀여운 쿠키런 느낌의 Jua 폰트 -->
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body {
+            font-family: 'Jua', sans-serif;
+            background-color: #fff9f0;
+            background-image: radial-gradient(#ffe0b2 10%, transparent 10%), radial-gradient(#ffe0b2 10%, transparent 10%);
+            background-size: 40px 40px;
+            background-position: 0 0, 20px 20px;
+            color: #4a4a4a;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none; /* 드래그 방지 */
+        }
+
+        #app-container {
+            width: 95%;
+            max-width: 1200px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            min-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            border: 6px solid #fff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 상단 헤더 */
+        header {
+            background: #ffdfba;
+            padding: 15px 40px 20px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            border-bottom: 4px solid #ffb3ba;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        /* 탭 버튼 */
+        .tab-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.1);
+        }
+        .tab-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.1);
+        }
+        .tab-btn.active {
+            background-color: #ff6b6b;
+            color: white;
+            border-color: #ff4757;
+        }
+
+        /* 공통 버튼 스타일 */
+        .action-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 6px 0 rgba(0,0,0,0.1);
+        }
+        .action-btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.1);
+        }
+
+        /* 스톱워치 랩 기록창 */
+        .lap-card {
+            background: white;
+            border-radius: 15px;
+            padding: 12px 20px;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 3px solid #f1f2f6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* 쿵쾅거리는 알람 애니메이션 */
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-5deg) scale(1.1); }
+            75% { transform: rotate(5deg) scale(1.1); }
+        }
+        .alarm-shake {
+            animation: shake 0.3s infinite;
+        }
+
+        /* 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #bae1ff; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #86bbdf; }
+
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <header>
+        <!-- 실시간 날짜/시계 -->
+        <div id="current-datetime" class="text-[#d35400] text-xl font-bold w-full text-right tracking-wide mb-1">
+            0000년 00월 00일 (요일) 00:00:00
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <h1 class="text-3xl font-bold text-gray-800 tracking-wide">⏰ 집중 쏙쏙 타이머</h1>
+            <div class="flex gap-2 ml-8">
+                <button id="tab-timer" onclick="switchTab('timer')" class="tab-btn active px-6 py-2 bg-white rounded-xl text-xl text-gray-600 font-bold border-2 border-[#ffb3ba]">🍅 뽀모도로 타이머</button>
+                <button id="tab-stopwatch" onclick="switchTab('stopwatch')" class="tab-btn px-6 py-2 bg-white rounded-xl text-xl text-gray-600 font-bold border-2 border-[#ffb3ba]">⏱️ 스피드 스톱워치</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 w-full p-8 flex flex-col items-center justify-center">
+        
+        <!-- ==================== 타이머 모드 ==================== -->
+        <div id="mode-timer" class="flex flex-col items-center w-full max-w-4xl">
+            
+            <div class="relative w-[380px] h-[380px] flex justify-center items-center">
+                <!-- 비주얼 타이머 배경 (흰색 원판) -->
+                <div class="absolute w-full h-full rounded-full bg-white shadow-[0_15px_35px_rgba(0,0,0,0.1)] border-[10px] border-white overflow-hidden flex justify-center items-center">
+                    
+                    <!-- 파이 (남은 시간 - 빨간색) -->
+                    <div id="timer-pie" class="absolute w-full h-full" style="background: conic-gradient(#ff3b30 0deg, #ff3b30 360deg, transparent 360deg);"></div>
+                    
+                    <!-- 4개의 점 (시계 눈금) -->
+                    <div class="absolute top-2 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-gray-600 rounded-full z-20"></div>
+                    <div class="absolute bottom-2 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-gray-600 rounded-full z-20"></div>
+                    <div class="absolute left-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-gray-600 rounded-full z-20"></div>
+                    <div class="absolute right-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-gray-600 rounded-full z-20"></div>
+
+                    <!-- 가운데 다크서클 -->
+                    <div class="absolute w-[180px] h-[180px] bg-[#2d3436] rounded-full z-10 flex justify-center items-center shadow-[0_10px_25px_rgba(0,0,0,0.4)] border-4 border-[#1e272e]">
+                        <!-- 시간 표시 (시간이 포함되면 텍스트 크기를 살짝 조절) -->
+                        <div id="timer-display" class="text-5xl font-bold text-white tracking-widest">25:00</div>
+                    </div>
+
+                </div>
+            </div>
+            <div id="timer-warning" class="text-xl text-red-500 font-bold mt-6 opacity-0 transition-opacity">10초 남았습니다! 집중!</div>
+
+            <!-- 시간 설정 입력창 (시/분/초 설정) -->
+            <div class="mt-6 flex items-center bg-white p-3 rounded-2xl shadow-sm border-4 border-[#ffe0b2]">
+                <span class="text-xl text-gray-600 mr-2 ml-2 font-bold">시간 설정:</span>
+                
+                <input type="number" id="timer-input-hr" value="0" min="0" max="99" class="w-16 text-center border-4 border-gray-200 rounded-xl p-2 text-2xl font-bold focus:outline-none focus:border-[#ffb3ba] bg-gray-50 text-gray-700 transition-colors">
+                <span class="text-xl text-gray-600 mx-1 font-bold">시간</span>
+                
+                <input type="number" id="timer-input-min" value="25" min="0" max="59" class="w-16 text-center border-4 border-gray-200 rounded-xl p-2 text-2xl font-bold focus:outline-none focus:border-[#ffb3ba] bg-gray-50 text-gray-700 transition-colors">
+                <span class="text-xl text-gray-600 mx-1 font-bold">분</span>
+                
+                <input type="number" id="timer-input-sec" value="0" min="0" max="59" class="w-16 text-center border-4 border-gray-200 rounded-xl p-2 text-2xl font-bold focus:outline-none focus:border-[#ffb3ba] bg-gray-50 text-gray-700 transition-colors">
+                <span class="text-xl text-gray-600 mx-1 mr-2 font-bold">초</span>
+                
+                <button onclick="applyTimerSetting()" class="px-5 py-2.5 ml-2 bg-[#ffdfba] hover:bg-[#ffcc99] text-[#d35400] text-xl rounded-xl font-bold transition transform hover:scale-105 active:scale-95">설정 적용</button>
+            </div>
+
+            <!-- 조작 버튼 -->
+            <div class="mt-8 flex gap-6">
+                <button onclick="startTimer()" id="btn-timer-start" class="action-btn px-12 py-4 bg-gradient-to-r from-[#baffc9] to-[#7bed9f] text-[#1e7a35] text-3xl rounded-2xl font-bold min-w-[180px]">
+                    ▶ 시작
+                </button>
+                <button onclick="pauseTimer()" id="btn-timer-pause" class="action-btn px-12 py-4 bg-gradient-to-r from-[#ffeaa7] to-[#ffd32a] text-[#b33939] text-3xl rounded-2xl font-bold min-w-[180px] hidden">
+                    ⏸ 정지
+                </button>
+                <button onclick="resetTimer()" class="action-btn px-10 py-4 bg-gray-200 hover:bg-gray-300 text-gray-600 text-3xl rounded-2xl font-bold shadow-[0_6px_0_#d1d5db]">
+                    🔄 리셋
+                </button>
+            </div>
+
+        </div>
+
+        <!-- ==================== 스톱워치 모드 ==================== -->
+        <div id="mode-stopwatch" class="hidden flex-row items-start w-full max-w-6xl mx-auto gap-10">
+            
+            <!-- 왼쪽: 스톱워치 메인 -->
+            <div class="flex-1 flex flex-col items-center bg-white p-10 rounded-3xl shadow-sm border-4 border-[#bae1ff]">
+                <h2 class="text-3xl text-gray-500 font-bold mb-6">스피드 스톱워치</h2>
+                
+                <div class="bg-gray-50 border-4 border-[#bae1ff] rounded-3xl w-full py-12 flex justify-center items-end mb-10 shadow-inner">
+                    <span id="sw-display-min" class="text-8xl font-bold text-gray-700">00</span>
+                    <span class="text-7xl font-bold text-gray-700 mb-2 mx-1">:</span>
+                    <span id="sw-display-sec" class="text-8xl font-bold text-gray-700">00</span>
+                    <span class="text-5xl font-bold text-gray-400 mb-2 mx-1">.</span>
+                    <span id="sw-display-ms" class="text-5xl font-bold text-gray-400 mb-2 w-[70px] text-left">00</span>
+                </div>
+
+                <!-- 조작 버튼 -->
+                <div class="flex gap-4 w-full justify-center">
+                    <button onclick="startStopwatch()" id="btn-sw-start" class="action-btn flex-1 py-4 bg-gradient-to-r from-[#baffc9] to-[#7bed9f] text-[#1e7a35] text-3xl rounded-2xl font-bold shadow-[0_6px_0_#6ebf81]">
+                        ▶ 시작
+                    </button>
+                    <button onclick="pauseStopwatch()" id="btn-sw-pause" class="action-btn flex-1 py-4 bg-gradient-to-r from-[#ffeaa7] to-[#ffd32a] text-[#b33939] text-3xl rounded-2xl font-bold shadow-[0_6px_0_#f3c832] hidden">
+                        ⏸ 일시정지
+                    </button>
+                    <button onclick="recordLap()" id="btn-sw-lap" class="action-btn flex-1 py-4 bg-gradient-to-r from-[#bae1ff] to-[#74b9ff] text-[#0984e3] text-3xl rounded-2xl font-bold shadow-[0_6px_0_#62a5e8] opacity-50 pointer-events-none transition-opacity">
+                        ⏱️ 기록
+                    </button>
+                    <button onclick="resetStopwatch()" class="action-btn flex-1 py-4 bg-gray-200 hover:bg-gray-300 text-gray-600 text-3xl rounded-2xl font-bold shadow-[0_6px_0_#d1d5db]">
+                        🔄 리셋
+                    </button>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 기록(랩) 리스트 -->
+            <div class="w-[400px] bg-white border-4 border-gray-100 rounded-3xl p-6 flex flex-col h-[550px] shadow-sm">
+                <h3 class="text-2xl font-bold text-gray-700 mb-4 text-center border-b pb-3">📝 측정 기록</h3>
+                <div id="lap-results-container" class="flex-1 overflow-y-auto pr-2 space-y-3">
+                    <div class="text-gray-400 text-center mt-20 text-xl" id="lap-empty-msg">측정을 시작하고<br>기록 버튼을 눌러보세요.</div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<script>
+    // ==========================================
+    // 상단 날짜 및 실시간 시계 로직
+    // ==========================================
+    function updateDateTime() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const day = days[now.getDay()];
+        
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        
+        const dateTimeStr = `${year}년 ${month}월 ${date}일 (${day}) ${hours}:${minutes}:${seconds}`;
+        document.getElementById('current-datetime').innerText = dateTimeStr;
+    }
+    
+    // 1초마다 시계 업데이트
+    setInterval(updateDateTime, 1000);
+
+
+    // ==========================================
+    // Web Audio API (빠른 반응속도의 효과음 생성기)
+    // ==========================================
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    // 1. 일반 클릭 효과음 (뾱!)
+    function playClick() {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    // 2. 카운트다운 경고음 (띠-!) - 10초 남았을 때 날카로운 전자음
+    function playTick() {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.type = 'square'; // 날카로운 전자시계 소리를 위해 square 사용
+        osc.frequency.setValueAtTime(1000, audioCtx.currentTime); // 높은 음
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
+
+    // 3. 완료 알람 (띠리링 띠리링 띠리링!)
+    function playAlarm() {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        
+        function beep(startTime) {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1200, startTime); 
+            gainNode.gain.setValueAtTime(0.2, startTime);
+            gainNode.gain.linearRampToValueAtTime(0.01, startTime + 0.15);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.15);
+        }
+
+        const now = audioCtx.currentTime;
+        // 완료 시 강렬한 3연음 패턴 2번 반복
+        beep(now);
+        beep(now + 0.2);
+        beep(now + 0.4);
+        
+        beep(now + 0.8);
+        beep(now + 1.0);
+        beep(now + 1.2);
+    }
+
+    // 모든 버튼과 input 클릭 시 효과음 추가
+    document.addEventListener('DOMContentLoaded', () => {
+        const interactables = document.querySelectorAll('button, input');
+        interactables.forEach(el => {
+            el.addEventListener('mousedown', playClick);
+        });
+    });
+
+
+    // ==========================================
+    // 탭 전환 로직
+    // ==========================================
+    function switchTab(mode) {
+        document.getElementById('tab-timer').classList.remove('active', 'text-[#ff6b6b]', 'border-[#ff4757]');
+        document.getElementById('tab-stopwatch').classList.remove('active', 'text-[#ff6b6b]', 'border-[#ff4757]');
+        
+        document.getElementById('mode-timer').classList.add('hidden');
+        document.getElementById('mode-stopwatch').classList.add('hidden');
+
+        const activeTab = document.getElementById('tab-' + mode);
+        activeTab.classList.add('active', 'text-[#ff6b6b]', 'border-[#ff4757]');
+        
+        const activeMode = document.getElementById('mode-' + mode);
+        activeMode.classList.remove('hidden');
+        if(mode === 'timer') activeMode.classList.add('flex');
+        if(mode === 'stopwatch') activeMode.classList.add('flex');
+    }
+
+
+    // ==========================================
+    // 뽀모도로 타이머 로직 (비주얼 파이 & 시/분/초 설정 적용)
+    // ==========================================
+    let timerTotalMs = 25 * 60 * 1000;
+    let timerRemainingMs = timerTotalMs;
+    let timerId = null;
+    let timerEndTime = 0;
+    let lastBeepSec = -1;
+
+    const timerDisplay = document.getElementById('timer-display');
+    const timerPie = document.getElementById('timer-pie');
+    const btnTimerStart = document.getElementById('btn-timer-start');
+    const btnTimerPause = document.getElementById('btn-timer-pause');
+    const inputHr = document.getElementById('timer-input-hr');
+    const inputMin = document.getElementById('timer-input-min');
+    const inputSec = document.getElementById('timer-input-sec');
+    const warningText = document.getElementById('timer-warning');
+
+    function formatTime(ms) {
+        if (ms < 0) ms = 0;
+        const totalSec = Math.ceil(ms / 1000);
+        const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+        const s = (totalSec % 60).toString().padStart(2, '0');
+        
+        if (Math.floor(totalSec / 3600) > 0) {
+            return `${h}:${m}:${s}`;
+        }
+        return `${m}:${s}`;
+    }
+
+    function updateTimerUI() {
+        timerDisplay.innerText = formatTime(timerRemainingMs);
+        
+        // 1시간 이상일 때 글자 크기 조금 줄이기
+        if (timerRemainingMs >= 3600000) {
+            timerDisplay.classList.remove('text-5xl');
+            timerDisplay.classList.add('text-4xl');
+        } else {
+            timerDisplay.classList.remove('text-4xl');
+            timerDisplay.classList.add('text-5xl');
+        }
+
+        // 비주얼 파이 남은 영역 각도 계산
+        const progress = timerRemainingMs / timerTotalMs; // 1.0 -> 0.0
+        const degrees = progress * 360; // 360deg -> 0deg
+        
+        let pieColor = '#ff3b30'; // 선명한 빨간색
+
+        // 10초 카운트다운 효과
+        const secRemaining = Math.ceil(timerRemainingMs / 1000);
+        if (secRemaining <= 10 && secRemaining > 0 && timerId !== null) {
+            timerDisplay.classList.remove('text-white');
+            timerDisplay.classList.add('text-[#ff4757]'); // 가운데 텍스트를 빨간색으로 변경
+            warningText.style.opacity = '1';
+            
+            // 1초에 한 번만 틱 소리 재생 (전자시계 띠- 소리)
+            if (lastBeepSec !== secRemaining) {
+                playTick();
+                lastBeepSec = secRemaining;
+            }
+        } else {
+            timerDisplay.classList.add('text-white');
+            timerDisplay.classList.remove('text-[#ff4757]');
+            warningText.style.opacity = '0';
+        }
+
+        // 파이 차트 업데이트 (0도(12시 방향)에서 시작해서 남은 시간만큼 빨간색으로 채워짐)
+        timerPie.style.background = `conic-gradient(${pieColor} 0deg, ${pieColor} ${degrees}deg, transparent ${degrees}deg, transparent 360deg)`;
+    }
+
+    function applyTimerSetting() {
+        if (timerId !== null) return; // 실행 중엔 변경 불가
+        
+        let hr = parseInt(inputHr.value) || 0;
+        let min = parseInt(inputMin.value) || 0;
+        let sec = parseInt(inputSec.value) || 0;
+
+        if (hr < 0) hr = 0; if (hr > 99) hr = 99;
+        if (min < 0) min = 0; if (min > 59) min = 59;
+        if (sec < 0) sec = 0; if (sec > 59) sec = 59;
+        
+        // 전부 0이면 기본값 1분
+        if (hr === 0 && min === 0 && sec === 0) {
+            min = 1;
+        }
+
+        inputHr.value = hr;
+        inputMin.value = min;
+        inputSec.value = sec;
+        
+        timerTotalMs = (hr * 3600 + min * 60 + sec) * 1000;
+        timerRemainingMs = timerTotalMs;
+        timerDisplay.classList.remove('alarm-shake', 'text-[#ff4757]');
+        updateTimerUI();
+    }
+
+    function timerLoop() {
+        const now = Date.now();
+        timerRemainingMs = timerEndTime - now;
+
+        if (timerRemainingMs <= 0) {
+            timerRemainingMs = 0;
+            clearInterval(timerId);
+            timerId = null;
+            updateTimerUI();
+            
+            // 종료 알람 및 UI 
+            playAlarm();
+            timerDisplay.classList.add('alarm-shake', 'text-[#ff4757]');
+            timerDisplay.classList.remove('text-white');
+            btnTimerStart.classList.remove('hidden');
+            btnTimerPause.classList.add('hidden');
+            warningText.innerText = "시간 종료!!";
+            warningText.style.opacity = '1';
+        } else {
+            updateTimerUI();
+        }
+    }
+
+    function startTimer() {
+        if (timerId !== null || timerRemainingMs <= 0) return;
+        timerEndTime = Date.now() + timerRemainingMs;
+        timerId = setInterval(timerLoop, 16); // 60fps
+        
+        btnTimerStart.classList.add('hidden');
+        btnTimerPause.classList.remove('hidden');
+        timerDisplay.classList.remove('alarm-shake');
+        warningText.innerText = "10초 남았습니다! 집중!";
+    }
+
+    function pauseTimer() {
+        if (timerId === null) return;
+        clearInterval(timerId);
+        timerId = null;
+        
+        btnTimerStart.classList.remove('hidden');
+        btnTimerPause.classList.add('hidden');
+        btnTimerStart.innerText = "▶ 계속";
+    }
+
+    function resetTimer() {
+        clearInterval(timerId);
+        timerId = null;
+        lastBeepSec = -1;
+        
+        btnTimerStart.classList.remove('hidden');
+        btnTimerPause.classList.add('hidden');
+        btnTimerStart.innerText = "▶ 시작";
+        warningText.innerText = "10초 남았습니다! 집중!";
+        
+        applyTimerSetting(); // 설정된 시간으로 돌아감
+    }
+
+
+    // ==========================================
+    // 스피드 스톱워치 로직
+    // ==========================================
+    let swStartTime = 0;
+    let swElapsedTime = 0;
+    let swTimerId = null;
+    let lapCount = 0;
+
+    const swMin = document.getElementById('sw-display-min');
+    const swSec = document.getElementById('sw-display-sec');
+    const swMs = document.getElementById('sw-display-ms');
+    
+    const btnSwStart = document.getElementById('btn-sw-start');
+    const btnSwPause = document.getElementById('btn-sw-pause');
+    const btnSwLap = document.getElementById('btn-sw-lap');
+    const lapContainer = document.getElementById('lap-results-container');
+    const lapEmptyMsg = document.getElementById('lap-empty-msg');
+
+    function formatStopwatchTime(msTotal) {
+        const m = Math.floor(msTotal / 60000).toString().padStart(2, '0');
+        const s = Math.floor((msTotal % 60000) / 1000).toString().padStart(2, '0');
+        const ms = Math.floor((msTotal % 1000) / 10).toString().padStart(2, '0');
+        return { m, s, ms };
+    }
+
+    function updateStopwatchUI(timeStr) {
+        swMin.innerText = timeStr.m;
+        swSec.innerText = timeStr.s;
+        swMs.innerText = timeStr.ms;
+    }
+
+    function swLoop() {
+        const now = Date.now();
+        swElapsedTime = now - swStartTime;
+        updateStopwatchUI(formatStopwatchTime(swElapsedTime));
+    }
+
+    function startStopwatch() {
+        if (swTimerId !== null) return;
+        swStartTime = Date.now() - swElapsedTime;
+        swTimerId = setInterval(swLoop, 16); // 60fps
+        
+        btnSwStart.classList.add('hidden');
+        btnSwPause.classList.remove('hidden');
+        
+        // 랩(기록) 버튼 활성화
+        btnSwLap.classList.remove('opacity-50', 'pointer-events-none');
+    }
+
+    function pauseStopwatch() {
+        if (swTimerId === null) return;
+        clearInterval(swTimerId);
+        swTimerId = null;
+        
+        btnSwStart.classList.remove('hidden');
+        btnSwPause.classList.add('hidden');
+        btnSwStart.innerText = "▶ 계속";
+        
+        // 랩(기록) 버튼 비활성화
+        btnSwLap.classList.add('opacity-50', 'pointer-events-none');
+    }
+
+    function recordLap() {
+        if (swTimerId === null) return; // 실행 중일 때만 기록 가능
+        
+        lapCount++;
+        if (lapCount === 1 && lapEmptyMsg) {
+            lapEmptyMsg.style.display = 'none'; // 첫 기록 시 안내문구 숨김
+        }
+
+        const timeStr = formatStopwatchTime(swElapsedTime);
+        const lapText = `${timeStr.m}:${timeStr.s}.${timeStr.ms}`;
+
+        const card = document.createElement('div');
+        card.className = 'lap-card text-gray-700 font-bold';
+        card.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="bg-[#bae1ff] text-[#1c6fa6] rounded-full w-8 h-8 flex items-center justify-center text-sm">${lapCount}</span>
+                <span class="text-xl">기록</span>
+            </div>
+            <span class="text-3xl tracking-wider text-blue-600">${lapText}</span>
+        `;
+        
+        // 맨 위에 최신 기록 추가 (원하면 appendChild로 맨 아래에 추가 가능)
+        lapContainer.prepend(card);
+    }
+
+    function resetStopwatch() {
+        clearInterval(swTimerId);
+        swTimerId = null;
+        swElapsedTime = 0;
+        lapCount = 0;
+        
+        updateStopwatchUI({m: '00', s: '00', ms: '00'});
+        
+        btnSwStart.classList.remove('hidden');
+        btnSwPause.classList.add('hidden');
+        btnSwStart.innerText = "▶ 시작";
+        btnSwLap.classList.add('opacity-50', 'pointer-events-none');
+        
+        lapContainer.innerHTML = '<div class="text-gray-400 text-center mt-20 text-xl" id="lap-empty-msg">측정을 시작하고<br>기록 버튼을 눌러보세요.</div>';
+    }
+
+    // 초기화
+    window.onload = () => {
+        updateDateTime(); // 로딩 즉시 시계 한 번 표시
+        applyTimerSetting();
+    };
+
+</script>
+</body>
+</html>
